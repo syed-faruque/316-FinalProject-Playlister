@@ -6,6 +6,12 @@
 
 import mongoose from 'mongoose';
 
+
+/**
+ * Schema for a song added to the MongoDB
+ * Each song is associated with a title, artist, year, youtubeID, and owner
+ * Each song contains a duration and a number of listens
+ */
 const songSchema = new mongoose.Schema({
   title: {
     type: String,

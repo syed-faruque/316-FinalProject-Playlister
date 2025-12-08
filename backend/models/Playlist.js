@@ -5,6 +5,11 @@
 
 import mongoose from 'mongoose';
 
+/**
+ * Schema for a playlist added to the MongoDB
+ * Each playlist is associated with a name and an owner
+ * Each playlist contains an array of song objects and listeners
+ */
 const playlistSchema = new mongoose.Schema({
   name: {
     type: String,

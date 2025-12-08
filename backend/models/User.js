@@ -7,6 +7,11 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+
+/**
+ * Schema for a user added to the MongoDB
+ * Each user is associated with a email, userName, password, and avatar
+ */
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
