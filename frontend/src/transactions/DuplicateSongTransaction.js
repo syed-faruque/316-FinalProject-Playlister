@@ -3,26 +3,31 @@
  * SBU-ID: 116340094
  */
 
+
 import { BaseTransaction } from './BaseTransaction.js';
 
 /**
  * DuplicateSong_Transaction
  * 
- * This class represents a transaction that duplicates a song
- * in the playlist. It will be managed by the transaction stack.
+ * Represents a transaction that duplicates a song in the playlist.
+ * This transaction can be executed and undone via a transaction stack.
  */
 export default class DuplicateSong_Transaction extends BaseTransaction {
     constructor(initStore, initIndex) {
         super();
-        this.store = initStore;
-        this.index = initIndex;
+        this.store = initStore;  
+        this.index = initIndex;   
+        this.duplicateIndex = null;           
     }
 
     executeDo() {
-        this.store.duplicateSong(this.index);
+        this.store.duplicateSong(this.index); 
+        this.duplicateIndex = this.index + 1;
     }
 
     executeUndo() {
-        this.store.removeSong(this.index + 1);
+        if (this.duplicateIndex !== null) { 
+            this.store.removeSong(this.duplicateIndex);
+        }
     }
 }

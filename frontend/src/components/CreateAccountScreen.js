@@ -10,7 +10,7 @@ import axios from 'axios';
 const CreateAccountScreen = () => {
     const navigate = useNavigate();
 
-    // states to keep track of form data, errors, avatars, and submission process
+    // Stores all form fields the user types
     const [formData, setFormData] = useState({
         userName: '',
         email: '',
@@ -18,11 +18,17 @@ const CreateAccountScreen = () => {
         passwordConfirm: '',
         avatar: null,
     });
+
+    // Stores validation errors for each field
     const [errors, setErrors] = useState({});
+
+    // Stores preview image for avatar upload
     const [avatarPreview, setAvatarPreview] = useState(null);
+
+    // Tracks whether the registration request is currently sending
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // update the form data whenever a change is made
+    // Handles typing into any input field and clears its error
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -31,23 +37,23 @@ const CreateAccountScreen = () => {
         }
     };
 
-    // update the avatar state
+    // Handles avatar file selection → validates size → converts to Base64 → stores preview
     const handleAvatarChange = (e) => {
         const file = e.target.files[0];
         if (file) {
-            // checks file size of the uploaded image
             if (file.size > 2 * 1024 * 1024) {
                 setErrors(prev => ({ ...prev, avatar: 'Image size must be less than 2MB' }));
                 return;
             }
 
-            // uses FileReader to showcase the image src
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    setAvatarPreview(event.target.result);
-                    setFormData(prev => ({ ...prev, avatar: event.target.result }));
+                    const dataUrl = event.target.result;
+                    setAvatarPreview(dataUrl);
+                    const base64String = dataUrl.split(',')[1];
+                    setFormData(prev => ({ ...prev, avatar: base64String }));
                     setErrors(prev => ({ ...prev, avatar: '' }));
                 };
                 img.src = event.target.result;
@@ -56,7 +62,7 @@ const CreateAccountScreen = () => {
         }
     };
 
-    // checks if the entered form values are valid
+    // Validates all fields and populates the errors object
     const validateForm = () => {
         const newErrors = {};
 
@@ -89,24 +95,19 @@ const CreateAccountScreen = () => {
         return Object.keys(newErrors).length === 0;
     };
 
-
-    // if form inputs are valid, the data gets sent over to the server, then the response is received and handled
+    // Sends the registration request to the backend if form is valid
     const handleSubmit = async (e) => {
         e.preventDefault();
-
+        
         if (!validateForm()) {
             return;
         }
 
         setIsSubmitting(true);
-
-        // sends request containing form data to server
         try {
-            // if the server verifies, navigate to the login page
             await axios.post('/api/auth/register', formData);
             navigate('/login');
         } 
-        // if the server returns an error, set the error state to show the error message
         catch (error) {
             if (error.response?.data?.field) {
                 setErrors(prev => ({
@@ -126,18 +127,18 @@ const CreateAccountScreen = () => {
         }
     };
 
-    // basic checks to see if the form is valid
-    const isFormValid =
+    // Determines if the form is fully valid and ready to submit
+    const isFormValid = 
         formData.userName.trim() &&
         formData.email.trim() &&
         formData.password.length >= 8 &&
         formData.password === formData.passwordConfirm &&
         !Object.values(errors).some(err => err);
 
-    // renders out the form, errors, and the avatar
     return (
         <div className="create-account-screen">
             <h1 className="create-account-title">Create Account</h1>
+
             <form onSubmit={handleSubmit} className="create-account-form">
                 <div className="avatar-section">
                     {avatarPreview ? (
@@ -145,6 +146,7 @@ const CreateAccountScreen = () => {
                     ) : (
                         <div className="avatar-placeholder">No avatar</div>
                     )}
+
                     <input
                         type="file"
                         accept="image/*"

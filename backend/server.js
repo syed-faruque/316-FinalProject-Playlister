@@ -1,9 +1,3 @@
-/**
- * Syed Faruque
- * SBU-ID: 116340094
- */
-
-// imports
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -14,21 +8,19 @@ import playlistRoutes from './routes/playlists.js';
 import songRoutes from './routes/songs.js';
 import userRoutes from './routes/users.js';
 
-
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-
 
 // Middleware
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
+// Increase JSON payload limit to handle base64-encoded images (up to 10MB)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Session configuration
 app.use(session({
@@ -38,16 +30,14 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
 }));
-
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/playlister')
 .then(() => console.log('MongoDB connected successfully'))
 .catch(err => console.error('MongoDB connection error:', err));
-
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -55,6 +45,10 @@ app.use('/api/playlists', playlistRoutes);
 app.use('/api/songs', songRoutes);
 app.use('/api/users', userRoutes);
 
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Playlister API is running' });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -65,8 +59,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-
-// Makes the app listen on designated port
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+

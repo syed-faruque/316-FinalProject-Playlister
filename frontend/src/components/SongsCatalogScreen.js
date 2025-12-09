@@ -1,25 +1,16 @@
-/**
- * Syed Faruque
- * SBU-ID: 116340094
- */
-
-
-// necessary library imports
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
-// necessary modal imports
 import EditSongModal from './modals/EditSongModal';
 import RemoveSongModal from './modals/RemoveSongModal';
 import AddSongModal from './modals/AddSongModal';
 
 const SongsCatalogScreen = ({ user }) => {
-
-    // all the states to keep track of
+    const location = useLocation();
+    const navigate = useNavigate();
     const [songs, setSongs] = useState([]);
     const [filteredSongs, setFilteredSongs] = useState([]);
-       const [selectedSong, setSelectedSong] = useState(null);
+    const [selectedSong, setSelectedSong] = useState(null);
     const [filters, setFilters] = useState({
         title: '',
         artist: '',
@@ -28,6 +19,7 @@ const SongsCatalogScreen = ({ user }) => {
     const [sortBy, setSortBy] = useState('listens-hi-lo');
     const [menuAnchor, setMenuAnchor] = useState(null);
     const [menuSong, setMenuSong] = useState(null);
+    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
     const [editingSong, setEditingSong] = useState(null);
     const [removingSong, setRemovingSong] = useState(null);
     const [addingSong, setAddingSong] = useState(false);
@@ -37,29 +29,15 @@ const SongsCatalogScreen = ({ user }) => {
     const addToPlaylistMenuItemRef = useRef(null);
     const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-    // loads the songs, only fetches playlist information if the user is authenticated
-    useEffect(() => {
-        loadSongs();
-        if (user) {
-            loadPlaylists();
-        }
-    }, [user]);
-
-
-    // use effect hook to refilter and sort the songs catalog
-    useEffect(() => {
-        applyFiltersAndSort();
-    }, [songs, filters, sortBy]);
-
-
-    // sends the filtration data to the server and receives a response containing songs adhering to the filters
-    const loadSongs = async () => {
+    // Loads songs from the server with the current filters applied
+    const loadSongs = useCallback(async () => {
         try {
             setLoading(true);
             const params = {};
             if (filters.title) params.title = filters.title;
             if (filters.artist) params.artist = filters.artist;
             if (filters.year) params.year = filters.year;
+
             const response = await axios.get('/api/songs', { params });
             setSongs(response.data);
         } 
@@ -69,11 +47,10 @@ const SongsCatalogScreen = ({ user }) => {
         finally {
             setLoading(false);
         }
-    };
+    }, [filters.title, filters.artist, filters.year]);
 
-
-    // loads all the playlists from the server
-    const loadPlaylists = async () => {
+    // Loads the playlists owned by the current user from the server
+    const loadPlaylists = useCallback(async () => {
         if (!user) return [];
         try {
             const response = await axios.get('/api/playlists', { params: { ownerOnly: 'true' } });
@@ -86,9 +63,9 @@ const SongsCatalogScreen = ({ user }) => {
             setPlaylists([]);
             return [];
         }
-    };
+    }, [user]);
 
-    // filters and sorts the songs based off the filters and sort by states
+    // Filters and sorts the songs array based on user input and sort options
     const applyFiltersAndSort = () => {
         let filtered = [...songs];
 
@@ -138,18 +115,17 @@ const SongsCatalogScreen = ({ user }) => {
         setFilteredSongs(filtered);
     };
 
-    // updates the filter state whenever a change is made
+    // Updates the filter value for a given field in state
     const handleFilterChange = (field, value) => {
         setFilters(prev => ({ ...prev, [field]: value }));
     };
 
-    // loads the songs whenever a search is done
+    // Executes a search by reloading songs with current filters
     const handleSearch = () => {
         loadSongs();
     };
 
-
-    // updates the filters' states to empty
+    // Clears all filters and reloads all songs
     const handleClear = () => {
         setFilters({
             title: '',
@@ -159,36 +135,37 @@ const SongsCatalogScreen = ({ user }) => {
         loadSongs();
     };
 
-    // event handler for performing a search on an enter press, making it so the user doesn't have to click anything
+    // Triggers search on Enter key press in any filter input
     const handleKeyPress = (e) => {
         if (e.key === 'Enter') {
             handleSearch();
         }
     };
 
-    // when a song is clicked the selected song state is set and the song id is passed to the server to update its listens count
+    // Handles clicking on a song, setting it as selected and incrementing listen count
     const handleSongClick = async (song, event) => {
         if (event?.target?.closest('button') || event?.target?.closest('[role="button"]')) {
             return;
         }
+
         setSelectedSong(song);
         axios.post(`/api/songs/${song._id}/listen`).catch(console.error);
     };
 
-    // handler to open the menu by updating its state
+    // Opens the menu for a specific song at the given event target
     const handleMenuOpen = (event, song) => {
         setMenuAnchor(event.currentTarget);
         setMenuSong(song);
     };
 
-     // handler to close the menu by updating its state
-    const handleMenuClose = () => {
+    // Closes both the main song menu and playlist submenu
+    const handleMenuClose = useCallback(() => {
         setMenuAnchor(null);
         setMenuSong(null);
         setPlaylistMenuAnchor(null);
-    };
+    }, []);
 
-    // handles a press to the edit button by opening a modal
+    // Opens the EditSongModal for the currently selected song if user owns it
     const handleEdit = () => {
         if (menuSong && user && menuSong.owner._id === user._id) {
             setEditingSong(menuSong);
@@ -196,7 +173,7 @@ const SongsCatalogScreen = ({ user }) => {
         }
     };
 
-    // handles a press to the remove song button
+    // Opens the RemoveSongModal for the currently selected song if user owns it
     const handleRemove = () => {
         if (menuSong && user && menuSong.owner._id === user._id) {
             setRemovingSong(menuSong);
@@ -204,19 +181,26 @@ const SongsCatalogScreen = ({ user }) => {
         }
     };
 
-    // handles a press to add a new song to playlist
+    // Toggles the Add to Playlist submenu and loads playlists if needed
     const handleAddToPlaylist = async (event) => {
         event.preventDefault();
         event.stopPropagation();
         if (!user || !menuSong) return;
+
         await loadPlaylists();
-        const anchorElement = addToPlaylistMenuItemRef.current || menuAnchor;
-        if (anchorElement) {
-            setPlaylistMenuAnchor(anchorElement);
+
+        if (playlistMenuAnchor) {
+            setPlaylistMenuAnchor(null);
+        } 
+        else {
+            const anchorElement = addToPlaylistMenuItemRef.current;
+            if (anchorElement) {
+                setPlaylistMenuAnchor(anchorElement);
+            }
         }
     };
 
-    // handles clicking on a playlist in the dropdown menu in the songs catalog
+    // Handles adding the currently selected song to a chosen playlist
     const handlePlaylistSelect = async (playlistId) => {
         if (!menuSong || !user) return;
 
@@ -226,9 +210,11 @@ const SongsCatalogScreen = ({ user }) => {
         try {
             const playlist = await axios.get(`/api/playlists/${playlistId}`);
             const currentSongs = playlist.data.songs || [];
+
             const songExists = currentSongs.some(s =>
                 (s.song?._id || s.song) === menuSong._id
             );
+
             if (songExists) {
                 setSnackbar({
                     open: true,
@@ -237,6 +223,7 @@ const SongsCatalogScreen = ({ user }) => {
                 });
                 return;
             }
+
             const maxOrder = currentSongs.length > 0
                 ? Math.max(...currentSongs.map(s => s.order || 0))
                 : -1;
@@ -254,6 +241,7 @@ const SongsCatalogScreen = ({ user }) => {
                     },
                 ],
             });
+
             setSnackbar({
                 open: true,
                 message: `Added "${menuSong.title}" to "${playlist.data.name}"`,
@@ -269,8 +257,7 @@ const SongsCatalogScreen = ({ user }) => {
         }
     };
 
-
-    // handles a confirmation to remove the song. Ths should close the modal
+    // Confirms removal of a song from the catalog and updates state accordingly
     const handleRemoveConfirm = async () => {
         if (!removingSong) return;
         try {
@@ -286,25 +273,89 @@ const SongsCatalogScreen = ({ user }) => {
         }
     };
 
-    // checks if the user is an owener of a song
+    // Returns true if the logged-in user owns the given song
     const isOwner = (song) => {
         return user && song.owner._id === user._id;
     };
 
-    // helper function that returns the youtube emebed link given the id
+    // Generates a YouTube embed URL for a given YouTube video ID
     const getYouTubeEmbedUrl = (youtubeId) => {
         return `https://www.youtube.com/embed/${youtubeId}`;
     };
 
-    // sorts the playlist dropdown based off of the date updated
+    // Returns playlists sorted by most recently updated or created
     const sortedPlaylists = [...playlists].sort((a, b) => {
-        const dateА = new Date(a.updatedAt || a.createdAt || 0);
+        const dateA = new Date(a.updatedAt || a.createdAt || 0);
         const dateB = new Date(b.updatedAt || b.createdAt || 0);
-        return dateB - dateА;
+        return dateB - dateA;
     });
 
+    // Updates menu position relative to button whenever the anchor changes
+    useEffect(() => {
+        if (menuAnchor) {
+            const rect = menuAnchor.getBoundingClientRect();
+            const menuWidth = 180;
+            const viewportWidth = window.innerWidth;
 
-    // renders the songs catalog, also renders existing modals
+            let left = rect.left;
+            if (left + menuWidth > viewportWidth) {
+                left = rect.right - menuWidth;
+            }
+            if (left < 0) {
+                left = 8;
+            }
+
+            setMenuPosition({
+                top: rect.bottom + 2,
+                left: left,
+            });
+        }
+    }, [menuAnchor]);
+
+    // Adds a click listener to close menus when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (playlistMenuAnchor && !event.target.closest('.playlist-submenu') && !event.target.closest('.menu-item')) {
+                setPlaylistMenuAnchor(null);
+                return;
+            }
+            if (menuAnchor && !event.target.closest('.song-menu') && !event.target.closest('.song-menu-button') && !event.target.closest('.playlist-submenu')) {
+                handleMenuClose();
+            }
+        };
+
+        if (menuAnchor || playlistMenuAnchor) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside);
+            };
+        }
+    }, [menuAnchor, playlistMenuAnchor, handleMenuClose]);
+
+    // Loads songs and playlists initially and whenever user changes
+    useEffect(() => {
+        loadSongs();
+        if (user) {
+            loadPlaylists();
+        }
+    }, [user]);
+
+    // Opens EditSongModal automatically if location state indicates a song to edit
+    useEffect(() => {
+        if (location.state?.editSongId && songs.length > 0) {
+            const songToEdit = songs.find(s => s._id === location.state.editSongId);
+            if (songToEdit) {
+                setEditingSong(songToEdit);
+                window.history.replaceState({}, document.title);
+            }
+        }
+    }, [songs, location.state?.editSongId]);
+
+    // Applies filters and sorting whenever songs, filters, or sort option changes
+    useEffect(() => {
+        applyFiltersAndSort();
+    }, [songs, filters, sortBy]);
+
     return (
         <div className="songs-catalog-screen">
             <div className="songs-container">
@@ -326,13 +377,7 @@ const SongsCatalogScreen = ({ user }) => {
                                     className="filter-input"
                                 />
                                 {filters[key] && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleFilterChange(key, '')}
-                                        className="clear-button"
-                                    >
-                                        ✕
-                                    </button>
+                                    <button type="button" onClick={() => handleFilterChange(key, '')} className="clear-button">✕</button>
                                 )}
                             </div>
                         </div>
@@ -361,11 +406,7 @@ const SongsCatalogScreen = ({ user }) => {
                     <div className="songs-header">
                         <div className="sort-section">
                             <label>Sort:</label>
-                            <select
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
-                                className="sort-select"
-                            >
+                            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
                                 <option value="listens-hi-lo">Listens (Hi-Lo)</option>
                                 <option value="listens-lo-hi">Listens (Lo-Hi)</option>
                                 <option value="playlists-hi-lo">Playlists (Hi-Lo)</option>
@@ -377,9 +418,7 @@ const SongsCatalogScreen = ({ user }) => {
                                 <option value="year-hi-lo">Year (Hi-Lo)</option>
                                 <option value="year-lo-hi">Year (Lo-Hi)</option>
                             </select>
-                            <span className="song-count">
-                                {filteredSongs.length} Song{filteredSongs.length !== 1 ? 's' : ''}
-                            </span>
+                            <span className="song-count">{filteredSongs.length} Song{filteredSongs.length !== 1 ? 's' : ''}</span>
                         </div>
                     </div>
 
@@ -397,9 +436,7 @@ const SongsCatalogScreen = ({ user }) => {
                                 >
                                     <div className="song-card-content">
                                         <div className="song-info">
-                                            <div className="song-title">
-                                                {song.title} by {song.artist} ({song.year})
-                                            </div>
+                                            <div className="song-title">{song.title} by {song.artist} ({song.year})</div>
                                             <div className="song-stats">
                                                 <span>Listens: {song.listens?.toLocaleString() || 0}</span>
                                                 <span>Playlists: {song.playlistsCount || 0}</span>
@@ -424,38 +461,65 @@ const SongsCatalogScreen = ({ user }) => {
 
                     {user && (
                         <div className="create-song-section">
-                            <button
-                                onClick={() => setAddingSong(true)}
-                                className="create-button"
-                            >
-                                New Song
-                            </button>
+                            <button onClick={() => setAddingSong(true)} className="create-button">New Song</button>
                         </div>
                     )}
                 </div>
             </div>
 
             {menuAnchor && (
-                <div className="song-menu">
+                <div 
+                    className="song-menu"
+                    style={{
+                        position: 'fixed',
+                        top: `${menuPosition.top}px`,
+                        left: `${menuPosition.left}px`,
+                        zIndex: 1001,
+                    }}
+                >
                     {user && menuSong && (
                         <>
                             <div
                                 ref={addToPlaylistMenuItemRef}
-                                onClick={(e) => {
-                                    handleAddToPlaylist(e);
-                                }}
+                                onClick={(e) => { handleAddToPlaylist(e); }}
                                 className="menu-item"
+                                style={{ position: 'relative' }}
                             >
                                 Add to Playlist
+                                {playlistMenuAnchor && addToPlaylistMenuItemRef.current && (
+                                    <div 
+                                        className="playlist-submenu"
+                                        style={{
+                                            position: 'absolute',
+                                            top: '100%',
+                                            left: 0,
+                                            marginTop: '2px',
+                                            zIndex: 1500,
+                                        }}
+                                    >
+                                        {sortedPlaylists.length === 0 ? (
+                                            <div className="empty-menu">No playlists available</div>
+                                        ) : (
+                                            sortedPlaylists.map((playlist) => (
+                                                <div
+                                                    key={playlist._id}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handlePlaylistSelect(playlist._id);
+                                                    }}
+                                                    className="submenu-item"
+                                                >
+                                                    {playlist.name}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             {isOwner(menuSong) && (
                                 <>
-                                    <div onClick={handleEdit} className="menu-item">
-                                        Edit Song
-                                    </div>
-                                    <div onClick={handleRemove} className="menu-item">
-                                        Remove from Catalog
-                                    </div>
+                                    <div onClick={handleEdit} className="menu-item">Edit Song</div>
+                                    <div onClick={handleRemove} className="menu-item">Remove from Catalog</div>
                                 </>
                             )}
                         </>
@@ -463,65 +527,27 @@ const SongsCatalogScreen = ({ user }) => {
                 </div>
             )}
 
-            {playlistMenuAnchor && (
-                <div className="playlist-submenu">
-                    {sortedPlaylists.length === 0 ? (
-                        <div className="empty-menu">No playlists available</div>
-                    ) : (
-                        sortedPlaylists.map((playlist) => (
-                            <div
-                                key={playlist._id}
-                                onClick={() => handlePlaylistSelect(playlist._id)}
-                                className="submenu-item"
-                            >
-                                {playlist.name}
-                            </div>
-                        ))
-                    )}
-                </div>
-            )}
-
             {editingSong && (
                 <EditSongModal
                     song={editingSong}
-                    onClose={() => {
-                        setEditingSong(null);
-                        loadSongs();
-                    }}
-                    onUpdate={loadSongs}
+                    onClose={() => setEditingSong(null)}
+                    onSave={loadSongs}
                 />
             )}
 
             {removingSong && (
                 <RemoveSongModal
                     song={removingSong}
-                    onConfirm={handleRemoveConfirm}
-                    onCancel={() => setRemovingSong(null)}
+                    onClose={() => setRemovingSong(null)}
+                    onRemove={handleRemoveConfirm}
                 />
             )}
 
             {addingSong && (
                 <AddSongModal
-                    onClose={() => {
-                        setAddingSong(false);
-                        loadSongs();
-                    }}
-                    onUpdate={loadSongs}
+                    onClose={() => setAddingSong(false)}
+                    onAdd={loadSongs}
                 />
-            )}
-
-            {snackbar.open && (
-                <div className="snackbar">
-                    <div className="snackbar-message">{snackbar.message}</div>
-                    <button
-                        onClick={() =>
-                            setSnackbar({ open: false, message: '', severity: 'success' })
-                        }
-                        className="snackbar-close"
-                    >
-                        Close
-                    </button>
-                </div>
             )}
         </div>
     );

@@ -3,8 +3,9 @@
  * SBU-ID: 116340094
  */
 
+
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import VerifyRemoveSongModal from './VerifyRemoveSongModal';
 import AddSong_Transaction from '../../transactions/AddSongTransaction.js';
@@ -15,24 +16,20 @@ import ChangeName_Transaction from '../../transactions/ChangeNameTransaction.js'
 
 const EditPlaylistModal = ({ playlist, onClose, user }) => {
     const navigate = useNavigate();
-    const location = useLocation();
-
-    // states to keep track of
     const [playlistName, setPlaylistName] = useState(playlist?.name || '');
     const [songs, setSongs] = useState([]);
-       const [transactions, setTransactions] = useState([]);
+    const [transactions, setTransactions] = useState([]);
     const [transactionIndex, setTransactionIndex] = useState(-1);
     const [removingSongIndex, setRemovingSongIndex] = useState(null);
     const previousSongsRef = useRef([]);
     const isApplyingTransactionRef = useRef(false);
     const [draggedIndex, setDraggedIndex] = useState(null);
 
-    // immediately loads the playlists and updates their state when they change
+    // load playlist
     useEffect(() => {
         if (playlist?._id) {
             loadPlaylist();
-        } 
-        else if (playlist) {
+        } else if (playlist) {
             setPlaylistName('Untitled 0');
             setSongs([]);
             setTransactions([]);
@@ -40,135 +37,44 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
         }
     }, [playlist?._id, playlist]);
 
-    // handles reopening the modal after selecting a song
+    // track previous songs
     useEffect(() => {
-        if (location.state?.reopenEditModal && location.state?.playlistId && playlist?._id === location.state.playlistId) {
-            const previousSongs = JSON.parse(JSON.stringify(songs));
-            const previousSongIds = previousSongs
-                .map(s => {
-                    const songId = s.song?._id || s.song;
-                    return songId ? songId.toString() : null;
-                })
-                .filter(Boolean);
-
-            loadPlaylist(true).then((result) => {
-                if (!result) return;
-
-                const newSongItem = result.newSongs.find(s => {
-                    const songId = s.song?._id || s.song;
-                    return songId && !previousSongIds.includes(songId.toString());
-                });
-
-                if (newSongItem && newSongItem.song) {
-                    const index = result.newSongs.findIndex(s => {
-                        const currentId = s.song?._id || s.song;
-                        const newId = newSongItem.song?._id || newSongItem.song;
-                        return currentId && newId && currentId.toString() === newId.toString();
-                    });
-
-                    if (index !== -1) {
-                        setTimeout(() => {
-                            const transaction = new AddSong_Transaction(store, index, newSongItem.song);
-
-                            isApplyingTransactionRef.current = true;
-                            setTransactions(prevTransactions => {
-                                const newTransactions = prevTransactions.slice(0, transactionIndex + 1);
-                                newTransactions.push(transaction);
-                                setTransactionIndex(newTransactions.length - 1);
-                                return newTransactions;
-                            });
-
-                            setTimeout(() => {
-                                isApplyingTransactionRef.current = false;
-                            }, 100);
-                        }, 100);
-                    }
-                }
-
-                window.history.replaceState({}, document.title);
-            });
-        }
-    }, [location.state, playlist?._id]);
-
-    // creates a transaction when new songs are added to the playlist externally
-    useEffect(() => {
-        if (isApplyingTransactionRef.current) {
-            previousSongsRef.current = JSON.parse(JSON.stringify(songs));
-            return;
-        }
-
-        if (!playlist?._id || previousSongsRef.current.length === songs.length) {
-            previousSongsRef.current = JSON.parse(JSON.stringify(songs));
-            return;
-        }
-
-        if (songs.length > previousSongsRef.current.length) {
-            const previousSongIds = previousSongsRef.current
-                .map(s => {
-                    const songId = s.song?._id || s.song;
-                    return songId ? songId.toString() : null;
-                })
-                .filter(Boolean);
-
-            const newSongItem = songs.find(s => {
-                const songId = s.song?._id || s.song;
-                return songId && !previousSongIds.includes(songId.toString());
-            });
-
-            if (newSongItem && newSongItem.song) {
-                const index = songs.findIndex(s => {
-                    const currentId = s.song?._id || s.song;
-                    const newId = newSongItem.song?._id || newSongItem.song;
-                    return currentId && newId && currentId.toString() === newId.toString();
-                });
-
-                if (index !== -1) {
-                    const transaction = new AddSong_Transaction(store, index, newSongItem.song);
-                    executeTransaction(transaction);
-                }
-            }
-        }
-
+        if (isApplyingTransactionRef.current) return;
         previousSongsRef.current = JSON.parse(JSON.stringify(songs));
-    }, [songs.length, playlist?._id]);
+    }, [songs]);
 
-    // fetches data for a playlist from server
-    const loadPlaylist = async (preserveTransactions = false) => {
+    // load playlist data
+    const loadPlaylist = async () => {
         try {
             const response = await axios.get(`/api/playlists/${playlist._id}`);
             const playlistData = response.data;
-            setPlaylistName(playlistData.name);
-            const sortedSongs = (playlistData.songs || []).sort((a, b) => (a.order || 0) - (b.order || 0));
 
-            const previousSongs = JSON.parse(JSON.stringify(songs));
+            setPlaylistName(playlistData.name);
+
+            const sortedSongs = (playlistData.songs || [])
+                .sort((a, b) => (a.order || 0) - (b.order || 0));
 
             setSongs(sortedSongs);
-
-            if (!preserveTransactions) {
-                setTransactions([]);
-                setTransactionIndex(-1);
-            }
+            setTransactions([]);
+            setTransactionIndex(-1);
 
             previousSongsRef.current = JSON.parse(JSON.stringify(sortedSongs));
-
-            return { previousSongs, newSongs: sortedSongs };
         } 
         catch (error) {
             console.error('Failed to load playlist:', error);
-            return null;
         }
     };
 
-    // handles all playlist operations through store methods
+    // transaction store
     const store = {
-        // adds a song
-        addSong: (index, song) => {
-            setSongs(prevSongs => {
-                const newSongs = [...prevSongs];
-                const songItem = {
-                    song: song,
-                    order: index,
-                };
+        addSong: (index, songOrSongItem) => {
+            setSongs(prev => {
+                const newSongs = [...prev];
+
+                const songItem = songOrSongItem.song
+                    ? songOrSongItem
+                    : { song: songOrSongItem, order: index };
+
                 newSongs.splice(index, 0, songItem);
 
                 for (let i = index + 1; i < newSongs.length; i++) {
@@ -179,10 +85,9 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
             });
         },
 
-        // removes a song
         removeSong: (index) => {
-            setSongs(prevSongs => {
-                const newSongs = [...prevSongs];
+            setSongs(prev => {
+                const newSongs = [...prev];
                 newSongs.splice(index, 1);
 
                 for (let i = index; i < newSongs.length; i++) {
@@ -193,12 +98,11 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
             });
         },
 
-        // moves a song
         moveSong: (fromIndex, toIndex) => {
-            setSongs(prevSongs => {
-                const newSongs = [...prevSongs];
-                const [movedSong] = newSongs.splice(fromIndex, 1);
-                newSongs.splice(toIndex, 0, movedSong);
+            setSongs(prev => {
+                const newSongs = [...prev];
+                const [moved] = newSongs.splice(fromIndex, 1);
+                newSongs.splice(toIndex, 0, moved);
 
                 for (let i = 0; i < newSongs.length; i++) {
                     newSongs[i].order = i;
@@ -208,12 +112,11 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
             });
         },
 
-        // duplicates a song
         duplicateSong: (index) => {
-            setSongs(prevSongs => {
-                const newSongs = [...prevSongs];
-                const songToDuplicate = JSON.parse(JSON.stringify(newSongs[index]));
-                newSongs.splice(index + 1, 0, songToDuplicate);
+            setSongs(prev => {
+                const newSongs = [...prev];
+                const copy = JSON.parse(JSON.stringify(newSongs[index]));
+                newSongs.splice(index + 1, 0, copy);
 
                 for (let i = 0; i < newSongs.length; i++) {
                     newSongs[i].order = i;
@@ -223,23 +126,22 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
             });
         },
 
-        // sets playlist name
         setName: (name) => {
             setPlaylistName(name);
-        },
+        }
     };
 
-    // executes a transaction and updates history
+    // run transaction
     const executeTransaction = (transaction) => {
         isApplyingTransactionRef.current = true;
 
         transaction.executeDo();
 
-        setTransactions(prevTransactions => {
-            const newTransactions = prevTransactions.slice(0, transactionIndex + 1);
-            newTransactions.push(transaction);
-            setTransactionIndex(newTransactions.length - 1);
-            return newTransactions;
+        setTransactions(prev => {
+            const newList = prev.slice(0, transactionIndex + 1);
+            newList.push(transaction);
+            setTransactionIndex(newList.length - 1);
+            return newList;
         });
 
         setTimeout(() => {
@@ -247,90 +149,94 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
         }, 100);
     };
 
-    // undoes a transaction
+    // undo
     const handleUndo = () => {
         if (transactionIndex >= 0) {
-            const transaction = transactions[transactionIndex];
-            transaction.executeUndo();
+            isApplyingTransactionRef.current = true;
+
+            const t = transactions[transactionIndex];
+            t.executeUndo();
+
             setTransactionIndex(prev => prev - 1);
+
+            setTimeout(() => {
+                isApplyingTransactionRef.current = false;
+            }, 100);
         }
     };
 
-    // redoes a transaction
+    // redo
     const handleRedo = () => {
         if (transactionIndex < transactions.length - 1) {
-            const nextTransaction = transactions[transactionIndex + 1];
-            nextTransaction.executeDo();
+            isApplyingTransactionRef.current = true;
+
+            const t = transactions[transactionIndex + 1];
+            t.executeDo();
+
             setTransactionIndex(prev => prev + 1);
+
+            setTimeout(() => {
+                isApplyingTransactionRef.current = false;
+            }, 100);
         }
     };
 
-    // changes playlist name through transaction
+    // name change
     const handleNameChange = (value) => {
-        const oldName = playlistName;
-        const transaction = new ChangeName_Transaction(store, oldName, value);
+        const old = playlistName;
+        const transaction = new ChangeName_Transaction(store, old, value);
         executeTransaction(transaction);
     };
 
-    // navigates to add song page and saves playlist
+    // add song
     const handleAddSong = async () => {
         try {
             const playlistData = {
                 name: playlistName || 'Untitled 0',
-                songs: songs.map((songItem, index) => ({
-                    song: songItem.song?._id || songItem.song,
-                    order: index,
-                })),
+                songs: songs.map((item, index) => ({
+                    song: item.song?._id || item.song,
+                    order: index
+                }))
             };
-
-            let savedPlaylist;
 
             if (!playlist?._id) {
                 const response = await axios.post('/api/playlists', playlistData);
-                savedPlaylist = response.data;
-
-                setPlaylistName(savedPlaylist.name);
-                setSongs(savedPlaylist.songs || []);
+                const saved = response.data;
+                setPlaylistName(saved.name);
+                setSongs(saved.songs || []);
             } else {
-                const response = await axios.put(`/api/playlists/${playlist._id}`, playlistData);
-                savedPlaylist = response.data;
+                await axios.put(`/api/playlists/${playlist._id}`, playlistData);
             }
 
-            navigate('/songs', {
-                state: {
-                    returnTo: 'edit-playlist',
-                    playlistId: savedPlaylist._id,
-                    newlyCreated: !playlist?._id
-                }
-            });
+            navigate('/songs');
         } catch (error) {
             console.error('Failed to save playlist:', error);
             alert(error.response?.data?.error || 'Failed to save playlist. Please try again.');
         }
     };
 
-    // opens confirmation modal for removing a song
+    // remove song
     const handleRemoveSong = (index) => {
         setRemovingSongIndex(index);
     };
 
-    // confirms removing a song and creates transaction
+    // confirm removal
     const handleRemoveSongConfirm = () => {
         if (removingSongIndex !== null && songs[removingSongIndex]) {
             const songItem = songs[removingSongIndex];
-            const transaction = new RemoveSong_Transaction(store, removingSongIndex, songItem);
-            executeTransaction(transaction);
+            const t = new RemoveSong_Transaction(store, removingSongIndex, songItem);
+            executeTransaction(t);
             setRemovingSongIndex(null);
         }
     };
 
-    // duplicates a song through transaction
+    // duplicate song
     const handleDuplicateSong = (index) => {
-        const transaction = new DuplicateSong_Transaction(store, index);
-        executeTransaction(transaction);
+        const t = new DuplicateSong_Transaction(store, index);
+        executeTransaction(t);
     };
 
-    // handles dragging start
+    // drag start
     const handleDragStart = (e, index) => {
         if (e.target.closest('button') || e.target.closest('[role="button"]')) {
             e.preventDefault();
@@ -342,55 +248,66 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
         e.currentTarget.style.opacity = '0.5';
     };
 
-    // allows drag over
+    // drag over
     const handleDragOver = (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
     };
 
-    // handles dropping a dragged song and creates move transaction
+    // drop
     const handleDrop = (e, dropIndex) => {
         e.preventDefault();
         e.stopPropagation();
+
         if (draggedIndex !== null && draggedIndex !== dropIndex) {
-            const transaction = new MoveSong_Transaction(store, draggedIndex, dropIndex);
-            executeTransaction(transaction);
+            const t = new MoveSong_Transaction(store, draggedIndex, dropIndex);
+            executeTransaction(t);
         }
+
         setDraggedIndex(null);
     };
 
-    // resets drag styling on drag end
+    // drag end
     const handleDragEnd = (e) => {
         e.currentTarget.style.opacity = '1';
         setDraggedIndex(null);
     };
 
-    // navigates to edit a song
+    // edit song
     const handleEditSong = (songItem) => {
-        navigate('/songs', { state: { editSongId: songItem.song?._id } });
+        if (songItem.song) {
+            navigate('/songs', {
+                state: {
+                    editSongId: songItem.song._id,
+                    returnToEditPlaylist: playlist._id
+                }
+            });
+        }
     };
 
-    // saves playlist and closes modal
+    // close modal
     const handleClose = async () => {
         try {
             const playlistData = {
                 name: playlistName,
-                songs: songs.map((songItem, index) => ({
-                    song: songItem.song?._id || songItem.song,
-                    order: index,
-                })),
+                songs: songs.map((item, index) => ({
+                    song: item.song?._id || item.song,
+                    order: index
+                }))
             };
 
             if (playlist?._id) {
                 await axios.put(`/api/playlists/${playlist._id}`, playlistData);
-            } else if (playlist) {
+            } 
+            else if (playlist) {
                 if (playlistName || songs.length > 0) {
                     await axios.post('/api/playlists', playlistData);
                 }
             }
 
             onClose();
-        } catch (error) {
+        } 
+        catch (error) {
             console.error('Failed to save playlist:', error);
             alert(error.response?.data?.error || 'Failed to save playlist');
         }
@@ -403,11 +320,12 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
 
     return (
         <div className="modal-overlay">
-            <div className="modal-container">
+            <div className="modal-container edit-playlist-modal">
                 <div className="modal-header">
                     <h2 className="modal-title">Edit Playlist</h2>
                     <button onClick={handleClose} className="close-button">X</button>
                 </div>
+
                 <div className="modal-content">
                     <div className="playlist-name-section">
                         <div className="name-input-wrapper">
@@ -416,6 +334,7 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                 value={playlistName}
                                 onChange={(e) => handleNameChange(e.target.value)}
                                 className="playlist-name-input"
+                                placeholder="Playlist name"
                             />
                             {playlistName && (
                                 <button
@@ -427,9 +346,7 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                 </button>
                             )}
                         </div>
-                        <button onClick={handleAddSong} className="add-song-button">
-                            Add Song
-                        </button>
+                        <button onClick={handleAddSong} className="add-song-button">Add Song</button>
                     </div>
 
                     <div className="songs-container">
@@ -442,6 +359,7 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                 {songs.map((songItem, index) => {
                                     const song = songItem.song;
                                     if (!song) return null;
+
                                     return (
                                         <div
                                             key={songItem._id || `${song._id}-${index}`}
@@ -455,17 +373,10 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                             <div className="song-item-content">
                                                 <div className="song-info">
                                                     <div className="song-title">
-                                                        {song.title} by {song.artist} ({song.year})
-                                                    </div>
-                                                    <div className="song-stats">
-                                                        <span>
-                                                            Listens: {song.listens?.toLocaleString() || 0}
-                                                        </span>
-                                                        <span>
-                                                            Playlists: {song.playlistsCount || 0}
-                                                        </span>
+                                                        {index + 1}. {song.title} by {song.artist} ({song.year})
                                                     </div>
                                                 </div>
+
                                                 <div className="song-actions">
                                                     <button
                                                         type="button"
@@ -477,6 +388,7 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                                     >
                                                         Edit
                                                     </button>
+
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -487,6 +399,7 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                                                     >
                                                         Duplicate
                                                     </button>
+
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -506,26 +419,18 @@ const EditPlaylistModal = ({ playlist, onClose, user }) => {
                         )}
                     </div>
                 </div>
+
                 <div className="modal-actions">
                     <div className="undo-redo-section">
-                        <button
-                            onClick={handleUndo}
-                            disabled={!canUndo}
-                            className="undo-button"
-                        >
+                        <button onClick={handleUndo} disabled={!canUndo} className="undo-button">
                             Undo
                         </button>
-                        <button
-                            onClick={handleRedo}
-                            disabled={!canRedo}
-                            className="redo-button"
-                        >
+                        <button onClick={handleRedo} disabled={!canRedo} className="redo-button">
                             Redo
                         </button>
                     </div>
-                    <button onClick={handleClose} className="close-button">
-                        Close
-                    </button>
+
+                    <button onClick={handleClose} className="close-button-action">Close</button>
                 </div>
             </div>
 

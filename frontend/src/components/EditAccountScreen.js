@@ -3,14 +3,13 @@
  * SBU-ID: 116340094
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+// Edit account screen component
 const EditAccountScreen = ({ user, onUpdate }) => {
     const navigate = useNavigate();
-
-    // use states to keep track of form data, errors, the avatar, and submission process
     const [formData, setFormData] = useState({
         userName: user?.userName || '',
         password: '',
@@ -23,8 +22,21 @@ const EditAccountScreen = ({ user, onUpdate }) => {
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Update formData when user prop changes
+    useEffect(() => {
+        if (user) {
+            setFormData(prev => ({
+                ...prev,
+                userName: user.userName || '',
+                avatar: user.avatar || null,
+            }));
+            setAvatarPreview(
+                user.avatar ? `data:image/png;base64,${user.avatar}` : null
+            );
+        }
+    }, [user]);
 
-    // handles updating the form data whenever a change occurs
+    // Handles typing into inputs and clears field errors
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -33,24 +45,24 @@ const EditAccountScreen = ({ user, onUpdate }) => {
         }
     };
 
-    // handles updating the avatar state when a file is uploaded
+    // Handles avatar file selection, validation, and preview/base64 extraction
     const handleAvatarChange = (e) => {
         const file = e.target.files[0];
         if (file) {
-
-            // checks the file size
             if (file.size > 2 * 1024 * 1024) {
                 setErrors(prev => ({ ...prev, avatar: 'Image size must be less than 2MB' }));
                 return;
             }
 
-            // uses FileReader to display the image src on the page
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    setAvatarPreview(event.target.result);
-                    setFormData(prev => ({ ...prev, avatar: event.target.result }));
+                    const dataUrl = event.target.result;
+                    setAvatarPreview(dataUrl);
+                    // Extract just the base64 part (remove "data:image/...;base64," prefix)
+                    const base64String = dataUrl.split(',')[1];
+                    setFormData(prev => ({ ...prev, avatar: base64String }));
                     setErrors(prev => ({ ...prev, avatar: '' }));
                 };
                 img.src = event.target.result;
@@ -59,8 +71,7 @@ const EditAccountScreen = ({ user, onUpdate }) => {
         }
     };
 
-
-    // checks if the inputs are even valid
+    // Validates the form fields and sets errors
     const validateForm = () => {
         const newErrors = {};
 
@@ -88,8 +99,7 @@ const EditAccountScreen = ({ user, onUpdate }) => {
         return Object.keys(newErrors).length === 0;
     };
 
-
-    // sends the data the user inputted to the serverside and handles its response
+    // Submits updated account data to the server
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -99,12 +109,23 @@ const EditAccountScreen = ({ user, onUpdate }) => {
 
         setIsSubmitting(true);
         try {
-            // sends the form data to the server and if the server approves it updates the users state using the onUpdate hook
-            const response = await axios.put('/api/users/me', formData);
+            // Prepare data to send - ensure avatar is sent even if null/empty
+            const updateData = {
+                userName: formData.userName,
+                avatar: formData.avatar || '',
+            };
+
+            // Only include password fields if they're being changed
+            if (formData.password && formData.passwordConfirm) {
+                updateData.password = formData.password;
+                updateData.passwordConfirm = formData.passwordConfirm;
+            }
+
+            const response = await axios.put('/api/users/me', updateData);
+            // Update the user state with the response
             onUpdate(response.data.user);
             navigate(-1);
         } 
-        // if the server returns an error, it will set the error state showcasing the error message
         catch (error) {
             if (error.response?.data?.field) {
                 setErrors(prev => ({
@@ -124,14 +145,17 @@ const EditAccountScreen = ({ user, onUpdate }) => {
         }
     };
 
+    // Cancels editing and navigates back
     const handleCancel = () => {
         navigate(-1);
     };
 
-    // checkers to see if the form has changed and if the inputs are valud
+    // Normalizes avatar values for comparison
+    const normalizeAvatar = (avatar) => avatar || '';
+
     const hasChanges =
         formData.userName !== user?.userName ||
-        formData.avatar !== user?.avatar ||
+        normalizeAvatar(formData.avatar) !== normalizeAvatar(user?.avatar) ||
         (formData.password && formData.passwordConfirm);
 
     const isFormValid =
@@ -139,8 +163,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
         (!formData.password || (formData.password.length >= 8 && formData.password === formData.passwordConfirm)) &&
         !Object.values(errors).some(err => err);
 
-
-    // renders the edit account screen with the form, the avatar, and the error messages
     return (
         <div className="edit-account-screen">
             <h1 className="edit-account-title">Edit Account</h1>
@@ -163,7 +185,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
                     </label>
                     {errors.avatar && <div className="error-message">{errors.avatar}</div>}
                 </div>
-
                 <div className="form-field">
                     <label>User Name</label>
                     <input
@@ -173,7 +194,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
                     />
                     {errors.userName && <div className="error-message">{errors.userName}</div>}
                 </div>
-
                 <div className="form-field">
                     <label>Email</label>
                     <input
@@ -183,7 +203,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
                     />
                     <div className="helper-text">Email cannot be changed</div>
                 </div>
-
                 <div className="form-field">
                     <label>Password</label>
                     <input
@@ -195,7 +214,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
                     {errors.password && <div className="error-message">{errors.password}</div>}
                     {!errors.password && <div className="helper-text">Leave blank to keep current password</div>}
                 </div>
-
                 <div className="form-field">
                     <label>Password Confirm</label>
                     <input
@@ -206,7 +224,6 @@ const EditAccountScreen = ({ user, onUpdate }) => {
                     />
                     {errors.passwordConfirm && <div className="error-message">{errors.passwordConfirm}</div>}
                 </div>
-
                 <div className="form-actions">
                     <button
                         type="submit"
