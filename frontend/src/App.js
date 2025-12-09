@@ -8,6 +8,9 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 
+// import the CSS styles
+import './App.css';
+
 // import the necessary screen compoenents
 import WelcomeScreen from './components/WelcomeScreen';
 import CreateAccountScreen from './components/CreateAccountScreen';
